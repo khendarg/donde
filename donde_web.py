@@ -1,5 +1,9 @@
 #!/usr/bin/env python
+print('Content-type: text/html\r\n\r\n')
 from __future__ import print_function
+
+import cgi, cgitb
+
 
 import Deuterocol1, donde
 
@@ -25,4 +29,8 @@ def main(fams, p1dir='deuterocol1', pdbtmdir='pdbtm', max_distance=5., min_dista
 	#for pdb in sorted(pdbs): pdbfns.append('%s/pdbs_raw/%s.pdb' % (p1dir, pdb[:4]))
 	#print(tabulate_contacts(pdbfns, max_distance=max_distance, min_distance=min_distance, include=include, exclude=exclude))
 
-main(fams=['1.H.1','8.A.16'])
+#main(fams=['1.H.1','8.A.16'])
+
+if __name__ == '__main__':
+	#form = cgi.FieldStorage()
+	print('TEST')
