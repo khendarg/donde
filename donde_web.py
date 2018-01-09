@@ -4,38 +4,105 @@ print('Content-type: text/html\r\n\r\n')
 
 import cgi
 import cgitb
-import donde
 import os, sys, re
 
 file_dir = os.path.dirname(__file__)
 sys.path.append(file_dir)
-import Deuterocol1
 
-def get_queries(fams, p1dir='deuterocol1', pdbtmdir='pdbtm'):
-	p1 = Deuterocol1.Protocol1(pdbtmdir=pdbtmdir, outdir=p1dir, offline=True)
-	p1.blast_pdbs()
-	for fam in fams: p1.get_queries(startswith=fam)
-	pdbs = {}
-	#for hit in p1.hits: 
-	for fam in fams: 
-		#print(p1.blast.by_target(fam))
-		pdbs.update(p1.blast.by_target(fam))
+DB='reduced_donde.tsv'
 
-	return pdbs
+class Hit:
+	def __init__(self, src):
+		self.src = src
+		self.tcdb = []
+		self.maxdist = -1
+		self.mindist = -1
+		self.include = []
+		self.exclude = []
+		self.contacts = []
+	def __str__(self):
+		out = '#### Ligands of %s ####' % self.src
 
-def main(fams, p1dir='deuterocol1', pdbtmdir='pdbtm', max_distance=5., min_distance=None, include=None, exclude=None):
-	pdbs = get_queries(fams=fams, p1dir=p1dir, pdbtmdir=pdbtmdir)
-	for pdb in sorted(pdbs):
-		fn = ('%s/pdbs_raw/%s.pdb' % (p1dir, pdb[:4]),)
+		for t in self.tcdb: out += '\n# %s' % t.strip()
 
-		print(donde.tabulate_contacts(fn, max_distance=max_distance, min_distance=min_distance, include=include, exclude=exclude, subtitle=sorted(pdbs[pdb])[0]))
-	#pdbfns = []
-	#for pdb in sorted(pdbs): pdbfns.append('%s/pdbs_raw/%s.pdb' % (p1dir, pdb[:4]))
-	#print(tabulate_contacts(pdbfns, max_distance=max_distance, min_distance=min_distance, include=include, exclude=exclude))
+		if self.maxdist == -1 or self.maxdist is None: maxdist = '(none)'
+		else: maxdist = '%0.2f Angstroms' % self.maxdist
+		out += '\n# Max. distance: %s' % maxdist
 
-#main(fams=['1.H.1','8.A.16'])
+		if self.mindist == -1 or self.mindist is None: mindist = '(none)'
+		else: mindist = '%0.2f Angstroms' % self.mindist
+		out += '\n# Min. distance: %s' % mindist
+
+		if not self.include: include = '(none)'
+		else: 
+			include = ''
+			for i in self.include: include += i + ', '
+			include = include[:-2]
+
+		out += '\n# Must include: %s' % include
+
+		if not self.exclude: exclude = '(none)'
+		else: 
+			exclude = ''
+			for i in self.exclude: exclude += i + ', '
+
+		out += '\n# Must exclude: %s' % exclude
+
+		out += '\n#l_atom\tl_resi\tp_resn\tp_chn\tp_resi\tatoms\tnames\ttms\tdistance'
+
+		contact = ''
+		for c in self.contacts: 
+			contact += '\n'
+			for f in c:
+				contact += '%s\t' % f
+			contact = contact[:-1]
+		out += contact
+		return out
+
+def get_queries(fams, max_distance=5., min_distance=None, include=None, exclude=None):
+	hits = []
+	with open('reduced_donde.tsv') as f:
+		current = Hit('')
+		for l in f:
+			if l.startswith('#### Ligands'):
+				if current.src and current.contacts: 
+					hits.append(current)
+					current = Hit(l.split()[3])
+					current.include = include
+					current.exclude = exclude
+					current.maxdist = max_distance
+					current.mindist = min_distance
+				else: 
+					current = Hit(l.split()[3])
+					current.include = include
+					current.exclude = exclude
+					current.maxdist = max_distance
+					current.mindist = min_distance
+			elif re.match('# [0-9]\.', l): current.tcdb.append(l[2:])
+			elif not l.startswith('#'):
+				sl = l.strip().split('\t')
+				dist = float(sl[8])
+				hetres = sl[0]
+				if (max_distance is not None) and (dist > max_distance): continue
+				if (min_distance is not None) and (dist < min_distance): continue
+				if (include is not None) and (hetres not in include): continue
+				if (exclude is not None) and (hetres in include): continue
+				found = 0
+				for fam in fams:
+					for tcid in current.tcdb:
+						if tcid.startswith(fam):
+							found = 1
+							break
+				if found: current.contacts.append(sl)
+	return hits
+
+def main(fams, max_distance=5., min_distance=None, include=None, exclude=None):
+	hits = get_queries(fams=fams)
+	for h in hits: print(h)
+	#for pdb in sorted(pdbs): 
 
 if __name__ == '__main__':
+
 	form = cgi.FieldStorage()
 
 	fams = form.getvalue('families')
@@ -74,3 +141,4 @@ if __name__ == '__main__':
 	print('<pre>')
 	main(fams=fams, max_distance=maxdist, min_distance=mindist, include=include, exclude=exclude)
 	print('</pre>')
+
